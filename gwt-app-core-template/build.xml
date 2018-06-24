@@ -18,7 +18,7 @@
 	<property name="workspace.dir" location="${basedir}/.." />
 
 	<!-- local SVN project corresponding to project containing workspace configuration, commonly called eclipse-settings -->
-	<property name="settings.root.dir" location="${workspace.dir}/eclipse-settings" />
+	<property name="settings.root.dir" location="${workspace.dir}/../settings/eclipse-settings" />
 	<property file="${settings.root.dir}/ant/localgwt.properties" />
 	<property file="${settings.root.dir}/ant/localtomcat.properties" />
 
