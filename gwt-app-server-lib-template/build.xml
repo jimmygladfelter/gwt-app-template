@@ -76,7 +76,7 @@
 		
 		<echo message="Checking for Artifactory"/>
 		<condition property="online" value="true"  else="false">
-			<socket server="office.veloxity.com" port="8333" />
+			<socket server="office.jgladfelter.com" port="8333" />
 		</condition>
 		<condition property="offline" value="true" else="false">
 			<isfalse value="${online}"/>
@@ -257,7 +257,7 @@
 				<attribute name="Build-Version" value="${project.build.version}_b${project.build.number}"/>
 				<attribute name="Build-Script-Version" value="${build.xml.version}"/>
 				<attribute name="Implementation-Title" value="${project.module.name}"/>
-				<attribute name="Implementation-Vendor" value="Vexoxity, LLC"/>
+				<attribute name="Implementation-Vendor" value="James C. Gladfelter"/>
 				<attribute name="Implementation-Vendor-Id" value="${project.org.name}"/>
 				<attribute name="Implementation-Version" value="${project.build.version}"/>
 				<attribute name="Class-Path" value="${project.manifest.classpath}"/>
@@ -487,7 +487,6 @@
 				version="true"
 				use="true"
 				useexternalfile="true">
-			<bottom><![CDATA[<i>Copyright &#169; ${javadoc.year} Veloxity, LLC. All Rights Reserved.</i>]]></bottom>
 			<!-- Build javadoc for src folder -->
 			<fileset dir="${src.dir}">
 				<include name="**/*.java"/>

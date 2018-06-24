@@ -6,7 +6,7 @@ Build-Date: 2018-06-24 00:20:48
 Build-Version: 1.0-LOCAL-SNAPSHOT_b9
 Build-Script-Version: $Id: build.xml 34 2017-11-16 05:17:28Z bmayer $
 Implementation-Title: gwtapp
-Implementation-Vendor: Veloxity, LLC
+Implementation-Vendor: James C. Gladfelter
 Implementation-Vendor-Id: com.app.template
 Implementation-Version: 1.0-LOCAL-SNAPSHOT
 
