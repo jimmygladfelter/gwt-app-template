@@ -1,4 +1,0 @@
-# Module gwtapp
-# RPC service class, partial path of RPC policy file
-com.app.gwt.client.GreetingService, A93DEAE86C0BA9038E70C950A1920972.gwt.rpc
-com.google.gwt.logging.shared.RemoteLoggingService, B873022FEBF4826D927798BC4A0BC927.gwt.rpc
