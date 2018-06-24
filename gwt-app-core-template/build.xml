@@ -180,189 +180,190 @@
 		</tstamp>
 
 		<javadoc destdir="${docs.dir}" author="true" version="true" use="true" useexternalfile="true">
-		<!-- Build javadoc for src folder -->
-		<fileset dir="${src.dir}">
-			<include name="**/*.java" />
-		</fileset>
-
-		<!-- Define classpath so javadoc can find references -->
-		<classpath>
-			<fileset refid="ivy.fileset" />
-		</classpath>
-	</javadoc>
-
-	<!-- now create the javadoc-jar and put in deploy directory -->
-	<jar jarfile="${deploy.dir}/${project.module.name}-javadoc.jar">
-		<fileset dir="${docs.dir}">
-			<include name="**/*" />
-		</fileset>
-	</jar>
-</target>
-
-<!--
-	 !  Resolves dependencies for this module based on the dependencies
-	 !  specified in the ivy.xml file. Calling this will also define variables
-	 !  declared in the ivy.xml file like the organization name, module name, and revision
-	  -->
-<target name="resolve">
-
-	<echo message="Checking for Artifactory" />
-	<condition property="online" value="true" else="false">
-		<socket server="office.jgladfelter.com" port="8333" />
-	</condition>
-	<condition property="offline" value="true" else="false">
-		<isfalse value="${online}" />
-	</condition>
-
-	<echo message="Offline: ${offline} Online: ${online}" />
-
-	<!-- by default, use the resolvers defined in the workspace ivy-settings -->
-	<property file="${settings.root.dir}/ivy/ivy-workspace-artifactory.properties" />
-	<property file="${settings.root.dir}/ivy/ivy-workspace-creds.properties" />
-	<property file="${settings.root.dir}/ivy/ivy-workspace-dep-repo.properties" />
-
-	<!-- Load the ivy.xml file properties as xml structure so that it can be used elsewhere -->
-	<xmlproperty file="ivy.xml" prefix="rawivy" keeproot="false" collapseAttributes="true" />
-
-	<ivy:configure file="${settings.root.dir}/ivy/ivy-workspace-settings.xml" override="true" />
-	<ivy:resolve file="ivy.xml" conf="default" type="jar,bundle,ejb,maven-plugin,plugin,war,csp" keep="true" checkifchanged="true" haltonfailure="true" usecacheonly="${offline}" />
-	<ivy:retrieve pattern="${lib.dir}/[artifact].[ext]" sync="true" />
-
-	<!-- Rename .plugin files to .jar so that get used at compilation and runtime -->
-	<move todir="${lib.dir}">
-		<fileset dir="${lib.dir}">
-			<include name="**/*.plugin" />
-		</fileset>
-		<mapper type="glob" from="*.plugin" to="*.jar" />
-	</move>
-
-	<!-- Move gwt servlet manually since artifact in maven repos is broken. -->
-	<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-servlet.jar" />
-	<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-servlet-deps.jar" />
-	<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-user.jar" />
-	<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-dev.jar" />
-	<copy todir="${lib.dir}" file="${gwt.sdk}/validation-api-1.0.0.GA-sources.jar" />
-	<copy todir="${lib.dir}" file="${gwt.sdk}/validation-api-1.0.0.GA.jar" />
-
-	<!-- defines the classpath when building the project -->
-	<ivy:cachepath pathid="ivy.classpath" conf="default" />
-	<ivy:cachefileset setid="ivy.fileset" conf="default" />
-
-	<!-- When revision isn't present it appears to default to user@hostname, by detecting @ we can determine if revision has been specified -->
-	<condition property="ivy.revision.valid">
-		<not>
-			<contains string="${ivy.revision}" substring="@" />
-		</not>
-	</condition>
-
-	<!-- Validate the ivy.xml -->
-	<fail unless="ivy.organisation" message="organisation not declared in ivy info" />
-	<fail unless="ivy.module" message="module not declared in ivy info" />
-	<fail unless="ivy.revision.valid" message="revision not declared in ivy info" />
-	<fail unless="ivy.revision" message="revision not declared in ivy info" />
-
-	<!-- Set the properties used by other targets in the build.xml -->
-	<property name="project.org.name" value="${ivy.organisation}" />
-	<property name="project.build.version" value="${ivy.revision}" />
-	<property name="project.module.name" value="${ivy.module}" />
-
-	<echo>Org=[${ivy.organisation}], Module=[${ivy.module}], Version=[${ivy.revision}]</echo>
-</target>
-
-<target name="build-distro" depends="war,source,javadocs" description="Creates the files necessary for publication">
-</target>
-
-<target name="build-test" depends="resolve,war" description="Creates only the files necessary for testing">
-	<!-- Append client side plugin prefix to the name of the war if specificed-->
-	<condition property="name.with.guid" value="${project.module.name}" else="${app.guid}_${project.module.name}">
-		<or>
-			<equals arg1="${app.guid}" arg2="default" />
-			<equals arg1="${app.guid}" arg2="none" />
-		</or>
-	</condition>
-
-	<copy file="${deploy.dir}/${project.module.name}.war" tofile="${deploy.dir}/${name.with.guid}.war" />
-</target>
-
-<!-- 
-	 !  Attempts to publish the module artifacts currently present in the ${deploy.dir} to the repository
-	-->
-<target name="publish" depends="resolve" description="Attempts to publish the artifacts present in the ivy.xml file from the deploy directory to the repository">
-	<!-- Publish to the local snapshot repo if revision is set to do so (-bmayer 2017-09-11) -->
-	<condition property="build.publishresolver" value="local.snapshots">
-		<and>
-			<matches string="${project.build.version}" pattern=".+-LOCAL-SNAPSHOT" />
-			<not>
-				<isset property="build.publishresolver" />
-			</not>
-		</and>
-	</condition>
-
-	<!-- Publish to the snapshot or release repository depending if snapshot is present in the revision -->
-	<condition property="build.publishresolver" value="artifactory.internal.snapshots">
-		<and>
-			<matches string="${project.build.version}" pattern=".+-SNAPSHOT" />
-			<not>
-				<isset property="build.publishresolver" />
-			</not>
-		</and>
-	</condition>
-
-	<!-- If publish resolver couldn't be set then use artifactory internal -->
-	<condition property="build.publishresolver" value="artifactory.internal">
-		<not>
-			<isset property="build.publishresolver" />
-		</not>
-	</condition>
-
-	<ivy:deliver deliverpattern="${deploy.dir}/[artifact].[ext]" module="${project.module.name}" pubdate="now" />
-
-	<echo message="Publishing to resolver: ${build.publishresolver}" />
-
-	<ivy:makepom ivyfile="${deploy.dir}/ivy.xml" pomfile="${deploy.dir}/${project.module.name}.pom">
-		<mapping conf="default" scope="compile" />
-	</ivy:makepom>
-
-	<!-- 
-		 !  The artifact pattern below assumes the revision is not included as part 
-		 !  of the module jar name when the jar is created/deployed.  If the deployed 
-		 !  jar does contain the revision value, change the artifactspattern to
-		 !  [artifact]-[revision].[ext].
+			<!-- Build javadoc for src folder -->
+			<fileset dir="${src.dir}">
+				<include name="**/*.java" />
+			</fileset>
+	
+			<!-- Define classpath so javadoc can find references -->
+			<classpath>
+				<fileset refid="ivy.fileset" />
+			</classpath>
+		</javadoc>
+	
+		<!-- now create the javadoc-jar and put in deploy directory -->
+		<jar jarfile="${deploy.dir}/${project.module.name}-javadoc.jar">
+			<fileset dir="${docs.dir}">
+				<include name="**/*" />
+			</fileset>
+		</jar>
+	</target>
+	
+	<!--
+		 !  Resolves dependencies for this module based on the dependencies
+		 !  specified in the ivy.xml file. Calling this will also define variables
+		 !  declared in the ivy.xml file like the organization name, module name, and revision
 		  -->
-	<ivy:publish resolver="${build.publishresolver}" publishivy="false" overwrite="true" update="true">
+	<target name="resolve">
+	
+		<echo message="Checking for Artifactory" />
+		<condition property="online" value="true" else="false">
+			<socket server="office.jgladfelter.com" port="8333" />
+		</condition>
+		<condition property="offline" value="true" else="false">
+			<isfalse value="${online}" />
+		</condition>
+	
+		<echo message="Offline: ${offline} Online: ${online}" />
+	
+		<!-- by default, use the resolvers defined in the workspace ivy-settings -->
+		<property file="${settings.root.dir}/ivy/ivy-workspace-artifactory.properties" />
+		<property file="${settings.root.dir}/ivy/ivy-workspace-creds.properties" />
+		<property file="${settings.root.dir}/ivy/ivy-workspace-dep-repo.properties" />
+	
+		<!-- Load the ivy.xml file properties as xml structure so that it can be used elsewhere -->
+		<xmlproperty file="ivy.xml" prefix="rawivy" keeproot="false" collapseAttributes="true" />
+	
+		<ivy:configure file="${settings.root.dir}/ivy/ivy-workspace-settings.xml" override="true" />
+		<ivy:resolve file="ivy.xml" conf="default" type="jar,bundle,ejb,maven-plugin,plugin,war,csp" keep="true" checkifchanged="true" haltonfailure="true" usecacheonly="${offline}" />
+		<ivy:retrieve pattern="${lib.dir}/[artifact].[ext]" sync="true" />
+	
+		<!-- Rename .plugin files to .jar so that get used at compilation and runtime -->
+		<move todir="${lib.dir}">
+			<fileset dir="${lib.dir}">
+				<include name="**/*.plugin" />
+			</fileset>
+			<mapper type="glob" from="*.plugin" to="*.jar" />
+		</move>
+	
+		<!-- Move gwt servlet manually since artifact in maven repos is broken. -->
+		<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-servlet.jar" />
+		<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-servlet-deps.jar" />
+		<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-user.jar" />
+		<copy todir="${lib.dir}" file="${gwt.sdk}/gwt-dev.jar" />
+		<copy todir="${lib.dir}" file="${gwt.sdk}/validation-api-1.0.0.GA-sources.jar" />
+		<copy todir="${lib.dir}" file="${gwt.sdk}/validation-api-1.0.0.GA.jar" />
+	
+		<!-- defines the classpath when building the project -->
+		<ivy:cachepath pathid="ivy.classpath" conf="default" />
+		<ivy:cachefileset setid="ivy.fileset" conf="default" />
+	
+		<!-- When revision isn't present it appears to default to user@hostname, by detecting @ we can determine if revision has been specified -->
+		<condition property="ivy.revision.valid">
+			<not>
+				<contains string="${ivy.revision}" substring="@" />
+			</not>
+		</condition>
+	
+		<!-- Validate the ivy.xml -->
+		<fail unless="ivy.organisation" message="organisation not declared in ivy info" />
+		<fail unless="ivy.module" message="module not declared in ivy info" />
+		<fail unless="ivy.revision.valid" message="revision not declared in ivy info" />
+		<fail unless="ivy.revision" message="revision not declared in ivy info" />
+	
+		<!-- Set the properties used by other targets in the build.xml -->
+		<property name="project.org.name" value="${ivy.organisation}" />
+		<property name="project.build.version" value="${ivy.revision}" />
+		<property name="project.module.name" value="${ivy.module}" />
+	
+		<echo>Org=[${ivy.organisation}], Module=[${ivy.module}], Version=[${ivy.revision}]</echo>
+	</target>
+	
+	<target name="build-distro" depends="war,source,javadocs" description="Creates the files necessary for publication">
+	</target>
+	
+	<target name="build-test" depends="resolve,war" description="Creates only the files necessary for testing">
+		<!-- Append client side plugin prefix to the name of the war if specificed-->
+		<condition property="name.with.guid" value="${project.module.name}" else="${app.guid}_${project.module.name}">
+			<or>
+				<equals arg1="${app.guid}" arg2="default" />
+				<equals arg1="${app.guid}" arg2="none" />
+			</or>
+		</condition>
+	
+		<copy file="${deploy.dir}/${project.module.name}.war" tofile="${deploy.dir}/${name.with.guid}.war" />
+	</target>
+	
+	<!-- 
+		 !  Attempts to publish the module artifacts currently present in the ${deploy.dir} to the repository
+		-->
+	<target name="publish" depends="resolve" description="Attempts to publish the artifacts present in the ivy.xml file from the deploy directory to the repository">
+		<!-- Publish to the local snapshot repo if revision is set to do so (-bmayer 2017-09-11) -->
+		<condition property="build.publishresolver" value="local.snapshots">
+			<and>
+				<matches string="${project.build.version}" pattern=".+-LOCAL-SNAPSHOT" />
+				<not>
+					<isset property="build.publishresolver" />
+				</not>
+			</and>
+		</condition>
+	
+		<!-- Publish to the snapshot or release repository depending if snapshot is present in the revision -->
+		<condition property="build.publishresolver" value="artifactory.internal.snapshots">
+			<and>
+				<matches string="${project.build.version}" pattern=".+-SNAPSHOT" />
+				<not>
+					<isset property="build.publishresolver" />
+				</not>
+			</and>
+		</condition>
+	
+		<!-- If publish resolver couldn't be set then use artifactory internal -->
+		<condition property="build.publishresolver" value="artifactory.internal">
+			<not>
+				<isset property="build.publishresolver" />
+			</not>
+		</condition>
+	
+		<ivy:deliver deliverpattern="${deploy.dir}/[artifact].[ext]" module="${project.module.name}" pubdate="now" />
+	
+		<echo message="Publishing to resolver: ${build.publishresolver}" />
+	
+		<ivy:makepom ivyfile="${deploy.dir}/ivy.xml" pomfile="${deploy.dir}/${project.module.name}.pom">
+			<mapping conf="default" scope="compile" />
+		</ivy:makepom>
+	
+		<!-- 
+			 !  The artifact pattern below assumes the revision is not included as part 
+			 !  of the module jar name when the jar is created/deployed.  If the deployed 
+			 !  jar does contain the revision value, change the artifactspattern to
+			 !  [artifact]-[revision].[ext].
+			  -->
+		<ivy:publish resolver="${build.publishresolver}" publishivy="false" overwrite="true" update="true">
+	
+			<artifacts pattern="${deploy.dir}/[artifact](-[classifier]).[ext]" />
+		</ivy:publish>
+	</target>
+	
+	<!-- Attempts to deploy the war present in the ${deploy.dir} to the configured tomcat -->
+	<target name="deploy-tomcat" description="Attempts to deploy the built war to tomcat">
+		<!-- The extended tasks that aren't included with ant by default-->
+		<taskdef name="deploy" classname="org.apache.catalina.ant.DeployTask" classpathref="tomcat.classpath" />
+		<taskdef name="undeploy" classname="org.apache.catalina.ant.UndeployTask" classpathref="tomcat.classpath" />
+		<taskdef name="ssldisable" classname="com.velox.SSLVerificationDisable" />
+	
+		<ssldisable />
+	
+		<!-- Append client side plugin prefix to the name of the war if specificed-->
+		<condition property="tomcat.deploy.path" value="/${project.module.name}" else="/${app.guid}_{project.module.name}">
+			<or>
+				<equals arg1="${app.guid}" arg2="default" />
+				<equals arg1="${app.guid}" arg2="none" />
+			</or>
+		</condition>
+	
+		<echo message="Deploying ${project.module.name} to tomcat at: ${deploytomcat.url}" />
+		<deploy update="true" url="${deploytomcat.url}" username="${deploytomcat.username}" password="${deploytomcat.password}" path="${tomcat.deploy.path}" war="${deploy.dir}/${project.module.name}.war" />
+	
+	</target>
 
-		<artifacts pattern="${deploy.dir}/[artifact](-[classifier]).[ext]" />
-	</ivy:publish>
-</target>
-
-<!-- Attempts to deploy the war present in the ${deploy.dir} to the configured tomcat -->
-<target name="deploy-tomcat" description="Attempts to deploy the built war to tomcat">
-	<!-- The extended tasks that aren't included with ant by default-->
-	<taskdef name="deploy" classname="org.apache.catalina.ant.DeployTask" classpathref="tomcat.classpath" />
-	<taskdef name="undeploy" classname="org.apache.catalina.ant.UndeployTask" classpathref="tomcat.classpath" />
-	<taskdef name="ssldisable" classname="com.velox.SSLVerificationDisable" />
-
-	<ssldisable />
-
-	<!-- Append client side plugin prefix to the name of the war if specificed-->
-	<condition property="tomcat.deploy.path" value="/${project.module.name}" else="/${app.guid}_{project.module.name}">
-		<or>
-			<equals arg1="${app.guid}" arg2="default" />
-			<equals arg1="${app.guid}" arg2="none" />
-		</or>
-	</condition>
-
-	<echo message="Deploying ${project.module.name} to tomcat at: ${deploytomcat.url}" />
-	<deploy update="true" url="${deploytomcat.url}" username="${deploytomcat.username}" password="${deploytomcat.password}" path="${tomcat.deploy.path}" war="${deploy.dir}/${project.module.name}.war" />
-
-</target>
-
-<!--
+	<!--
 	 !  increments the build number
 	  -->
-<target name="increment-buildnumber" description="increments the build number">
-	<propertyfile file="build-info.properties">
-		<entry key="project.build.number" type="int" operation="+" value="1" pattern="0" />
-	</propertyfile>
-</target>
+	<target name="increment-buildnumber" description="increments the build number">
+		<propertyfile file="build-info.properties">
+			<entry key="project.build.number" type="int" operation="+" value="1" pattern="0" />
+		</propertyfile>
+	</target>
+	
 </project>
